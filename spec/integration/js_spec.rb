@@ -17,7 +17,8 @@ describe "JS behaviour", :js => true do
       :money_proc => 100,
       :favorite_color => 'Red',
       :favorite_books => "The City of Gold and Lead",
-      :description => "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus a lectus et lacus ultrices auctor. Morbi aliquet convallis tincidunt. Praesent enim libero, iaculis at commodo nec, fermentum a dolor. Quisque eget eros id felis lacinia faucibus feugiat et ante. Aenean justo nisi, aliquam vel egestas vel, porta in ligula. Etiam molestie, lacus eget tincidunt accumsan, elit justo rhoncus urna, nec pretium neque mi et lorem. Aliquam posuere, dolor quis pulvinar luctus, felis dolor tincidunt leo, eget pretium orci purus ac nibh. Ut enim sem, suscipit ac elementum vitae, sodales vel sem."
+      :description => "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus a lectus et lacus ultrices auctor. Morbi aliquet convallis tincidunt. Praesent enim libero, iaculis at commodo nec, fermentum a dolor. Quisque eget eros id felis lacinia faucibus feugiat et ante. Aenean justo nisi, aliquam vel egestas vel, porta in ligula. Etiam molestie, lacus eget tincidunt accumsan, elit justo rhoncus urna, nec pretium neque mi et lorem. Aliquam posuere, dolor quis pulvinar luctus, felis dolor tincidunt leo, eget pretium orci purus ac nibh. Ut enim sem, suscipit ac elementum vitae, sodales vel sem.",
+      :favorite_movie => "The Hitchhiker's Guide to the Galaxy"
   end
 
   describe "namespaced controllers" do
@@ -63,6 +64,65 @@ describe "JS behaviour", :js => true do
       within("#last_name") do
         page.should have_content("Nothing to show")
       end
+    end
+
+    it "should render html content for nil option" do
+      @user.favorite_color = ""
+      @user.save!
+      visit user_path(@user)
+      within("#favorite_color") do
+        page.should have_xpath("//span[@class='nil']")
+      end
+    end
+
+    it "should render html content for nil option after edit" do
+      @user.favorite_color = "Blue"
+      @user.save!
+      visit user_path(@user)
+
+      bip_text @user, :favorite_color, ""
+
+      within("#favorite_color") do
+        page.should have_xpath("//span[@class='nil']")
+      end
+    end
+
+  end
+
+  it "should be able to update last but one item in list" do
+    @user.save!
+    @user2 = User.create :name => "Test",
+      :last_name => "User",
+      :email => "test@example.com",
+      :height => "5' 5\"",
+      :address => "Via Roma 99",
+      :zip => "25123",
+      :country => "2",
+      :receive_email => false,
+      :birth_date => Time.now.utc,
+      :description => "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus a lectus et lacus ultrices auctor. Morbi aliquet convallis tincidunt. Praesent enim libero, iaculis at commodo nec, fermentum a dolor. Quisque eget eros id felis lacinia faucibus feugiat et ante. Aenean justo nisi, aliquam vel egestas vel, porta in ligula. Etiam molestie, lacus eget tincidunt accumsan, elit justo rhoncus urna, nec pretium neque mi et lorem. Aliquam posuere, dolor quis pulvinar luctus, felis dolor tincidunt leo, eget pretium orci purus ac nibh. Ut enim sem, suscipit ac elementum vitae, sodales vel sem.",
+      :money => 100,
+      :money_proc => 100,
+      :favorite_color => 'Red',
+      :favorite_books => "The City of Gold and Lead",
+      :description => "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus a lectus et lacus ultrices auctor. Morbi aliquet convallis tincidunt. Praesent enim libero, iaculis at commodo nec, fermentum a dolor. Quisque eget eros id felis lacinia faucibus feugiat et ante. Aenean justo nisi, aliquam vel egestas vel, porta in ligula. Etiam molestie, lacus eget tincidunt accumsan, elit justo rhoncus urna, nec pretium neque mi et lorem. Aliquam posuere, dolor quis pulvinar luctus, felis dolor tincidunt leo, eget pretium orci purus ac nibh. Ut enim sem, suscipit ac elementum vitae, sodales vel sem."
+
+    visit users_path
+
+    within("tr#user_#{@user.id} > .name > span") do
+      page.should have_content("Lucia")
+      page.should have_xpath("//a[contains(@href,'#{user_path(@user)}')]")
+    end
+
+    id = BestInPlace::Utils.build_best_in_place_id @user, :name
+    page.execute_script <<-JS
+      $("#edit_#{@user.id}").click();
+      $("##{id} input[name='name']").val('Lisa');
+      $("##{id} form").submit();
+    JS
+
+    within("tr#user_#{@user.id} > .name > span") do
+      page.should have_content('Lisa')
     end
   end
 
@@ -207,6 +267,22 @@ describe "JS behaviour", :js => true do
     end
   end
 
+  it "should be able to use bip_bool to change a boolean value using an image" do
+    @user.save!
+    visit user_path(@user)
+
+    within("#receive_email_image") do
+      page.should have_xpath("//img[contains(@src,'no.png')]")
+    end
+
+    bip_bool @user, :receive_email
+
+    visit user_path(@user)
+    within("#receive_email_image") do
+      page.should have_xpath("//img[contains(@src,'yes.png')]")
+    end
+  end
+
   it "should correctly use an OK submit button when so configured for an input" do
     @user.save!
     visit user_path(@user)
@@ -246,6 +322,23 @@ describe "JS behaviour", :js => true do
     visit user_path(@user)
     within("#favorite_color") do
       page.should have_content('Red')
+    end
+  end
+
+  it "should not ask for confirmation on cancel if it is switched off" do
+    @user.save!
+    visit user_path(@user)
+
+    id = BestInPlace::Utils.build_best_in_place_id @user, :favorite_movie
+    page.execute_script <<-JS
+      $("##{id}").click();
+      $("##{id} input[name='favorite_movie']").val('No good movie');
+      $("##{id} input[type='button']").click();
+    JS
+
+    lambda { page.driver.browser.switch_to.alert }.should raise_exception(Selenium::WebDriver::Error::NoAlertPresentError)
+    within("#favorite_movie") do
+      page.should have_content("The Hitchhiker's Guide to the Galaxy")
     end
   end
 
@@ -593,6 +686,43 @@ describe "JS behaviour", :js => true do
       within("#alt_money") { page.should have_content("€58.00") }
     end
 
+    it "should keep link after edit with display_with :link_to" do
+      @user.save!
+      visit users_path
+      within("tr#user_#{@user.id} > .name > span") do
+        page.should have_content("Lucia")
+        page.should have_xpath("//a[contains(@href,'#{user_path(@user)}')]")
+      end
+      id = BestInPlace::Utils.build_best_in_place_id @user, :name
+      page.execute_script <<-JS
+        jQuery("#edit_#{@user.id}").click();
+        jQuery("##{id} input[name='name']").val('Maria Lucia');
+        jQuery("##{id} form").submit();
+      JS
+      within("tr#user_#{@user.id} > .name > span") do
+        page.should have_content("Maria Lucia")
+        page.should have_xpath("//a[contains(@href,'#{user_path(@user)}')]")
+      end
+    end
+
+    it "should keep link after aborting edit with display_with :link_to" do
+      @user.save!
+      visit users_path
+      within("tr#user_#{@user.id} > .name > span") do
+        page.should have_content("Lucia")
+        page.should have_xpath("//a[contains(@href,'#{user_path(@user)}')]")
+      end
+      id = BestInPlace::Utils.build_best_in_place_id @user, :name
+      page.execute_script <<-JS
+        jQuery("#edit_#{@user.id}").click();
+        jQuery("##{id} input[name='name']").blur();
+      JS
+      within("tr#user_#{@user.id} > .name > span") do
+        page.should have_content("Lucia")
+        page.should have_xpath("//a[contains(@href,'#{user_path(@user)}')]")
+      end
+    end
+
     describe "display_with using a lambda" do
 
 
@@ -689,6 +819,26 @@ describe "JS behaviour", :js => true do
     end
   end
 
+  it "should keep the same value after multipe edits" do
+    @user.save!
+
+    retry_on_timeout do
+      visit double_init_user_path(@user)
+
+      bip_area @user, :description, "A <a href=\"http://google.es\">link in this text</a> not sanitized."
+      visit double_init_user_path(@user)
+
+      page.should have_link("link in this text", :href => "http://google.es")
+
+      id = BestInPlace::Utils.build_best_in_place_id @user, :description
+      page.execute_script <<-JS
+        $("##{id}").click();
+      JS
+
+      page.find("##{id} textarea").value.should eq("A <a href=\"http://google.es\">link in this text</a> not sanitized.")
+    end
+  end
+
   it "should display single- and double-quotes in values appropriately" do
     @user.height = %{5' 6"}
     @user.save!
@@ -726,4 +876,84 @@ describe "JS behaviour", :js => true do
     end
   end
 
+  it "should escape javascript in test helpers" do
+    @user.save!
+
+    retry_on_timeout do
+      visit user_path(@user)
+
+      bip_text @user, :last_name, "Other '); alert('hi');"
+      sleep 1
+
+      @user.reload
+      @user.last_name.should eq("Other '); alert('hi');")
+    end
+  end
+
+  it "should save text in database without encoding" do
+    @user.save!
+
+    retry_on_timeout do
+      visit user_path(@user)
+
+      bip_text @user, :last_name, "Other \"thing\""
+      sleep 1
+
+      @user.reload
+      @user.last_name.should eq("Other \"thing\"")
+    end
+  end
+
+  it "should not strip html tags" do
+    @user.save!
+
+    retry_on_timeout do
+      visit user_path(@user)
+
+      bip_text @user, :last_name, "<script>alert('hi');</script>"
+      within("#last_name") { page.should have_content("<script>alert('hi');</script>") }
+
+      visit user_path(@user)
+
+      id = BestInPlace::Utils.build_best_in_place_id @user, :last_name
+      page.execute_script <<-JS
+        $("##{id}").click();
+      JS
+
+      page.find("##{id} input").value.should eq("<script>alert('hi');</script>")
+    end
+  end
+
+  it "should generate the select html with the proper current option selected" do
+    @user.save!
+    visit user_path(@user)
+    within("#country") do
+      page.should have_content("Italy")
+    end
+
+    id = BestInPlace::Utils.build_best_in_place_id @user, :country
+    page.execute_script <<-JS
+      $("##{id}").click();
+    JS
+
+    page.should have_css("##{id} select option[value='2'][selected='selected']")
+  end
+
+  it "should generate the select with the proper current option without reloading the page" do
+    @user.save!
+    visit user_path(@user)
+    within("#country") do
+      page.should have_content("Italy")
+    end
+
+    bip_select @user, :country, "France"
+
+    sleep 1 # Increase if browser is slow
+    id = BestInPlace::Utils.build_best_in_place_id @user, :country
+    page.execute_script <<-JS
+      $("##{id}").click();
+    JS
+
+    page.should have_css("##{id} select option[value='4'][selected='selected']")
+  end
 end
